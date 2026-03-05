@@ -5,23 +5,40 @@
     <title>Operational Visibility Report</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        body{font-family:Arial, sans-serif; margin:20px; background-color: #f4f7f6;}
-        table{border-collapse:collapse; width: 100%; margin-top:15px; font-size: 11px; background: white;}
-        th,td{border:1px solid #bdc3c7; padding:6px; text-align:center;}
-        th{background:#ecf0f1; color: #2c3e50; position: sticky; top: 0;}
-        .total-row { background: #3498db; color: white; font-weight: bold; }
-        .sub-total { background: #fdfdfd; font-weight: bold; color: #2980b9; }
-        button{padding:10px 20px; cursor: pointer; background: #27ae60; color: white; border: none; border-radius: 4px; font-weight: bold;}
-        #msg{margin-left: 15px; font-weight: bold; color: #2980b9;}
+        body { font-family: Arial, sans-serif; margin: 15px; background-color: #f4f7f6; }
+        .header-bar { display: flex; align-items: center; margin-bottom: 15px; gap: 15px; }
+        
+        /* TABLE DESIGN */
+        table { border-collapse: collapse; width: 100%; font-size: 10px; background: white; table-layout: auto; }
+        th, td { border: 1px solid #bdc3c7; padding: 4px 2px; text-align: center; }
+        
+        /* HEADER COLORS */
+        th { background: #eeeeee; color: #333; font-weight: bold; }
+        .asm-name { text-align: left; font-weight: bold; padding-left: 5px; width: 160px; background: #fff !important; }
+        
+        /* PERCENTAGE & TOTAL COLUMN STYLING */
+        .pct-col { background-color: #fff9c4; font-weight: bold; color: #d84315; width: 35px; }
+        .sub-total { background: #e3f2fd; font-weight: bold; color: #1565c0; }
+        .grand-col { background: #f5f5f5; font-weight: bold; }
+
+        /* BLUE TOTAL ROW */
+        .total-row { background: #3498db !important; color: white; font-weight: bold; }
+        .total-row td { border: 1px solid #2980b9; }
+
+        button { padding: 8px 16px; cursor: pointer; background: #27ae60; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        #msg { font-weight: bold; color: #2980b9; margin-left: 10px; }
     </style>
 </head>
 <body>
 
-<h2>Operational Visibility Report</h2>
-<input type="file" id="file" accept=".xlsx, .xls">
-<button onclick="downloadExcel()">Download MIS</button>
-<span id="msg"></span>
-<div id="table"></div>
+<div class="header-bar">
+    <h2 style="margin:0; font-size: 20px;">Operational Visibility Report</h2>
+    <input type="file" id="file" accept=".xlsx, .xls">
+    <button onclick="downloadExcel()">Download MIS</button>
+    <span id="msg"></span>
+</div>
+
+<div id="table-output"></div>
 
 <script>
 let finalData = {}; 
@@ -43,58 +60,27 @@ document.getElementById("file").addEventListener("change", e => {
 });
 
 /**
- * UPDATED MAPPING: Underwriting moved to CR
+ * EXACT MAPPING
  */
 function getQueueFromStatus(statusRaw) {
     if (!statusRaw) return "SO";
     const s = statusRaw.toString().toUpperCase().trim();
 
-    // CREDIT QUEUE (CR)
-    const crList = [
-        "REFER CREDIT MANAGER",
-        "FORWARD",
-        "CREDIT APPROVAL",
-        "CAM-HOLD",
-        "RE-SUBMITTED",
-        "DOCUMENT REQUEST SUBMITTED",
-        "DOC VERIFICATION PENDING",
-        "DOC VERIFICATION PENDING(STP CASE-ASM VALIDATION PENDING)",
-        "OSV VERIFIED",
-        "UNDERWRITING" 
-    ];
+    const crList = ["REFER CREDIT MANAGER","FORWARD","CREDIT APPROVAL","CAM-HOLD","RE-SUBMITTED",
+                    "DOCUMENT REQUEST SUBMITTED","DOC VERIFICATION PENDING",
+                    "DOC VERIFICATION PENDING(STP CASE-ASM VALIDATION PENDING)","OSV VERIFIED","UNDERWRITING"];
     if (crList.includes(s)) return "CR";
 
-    // SO QUEUE
-    const soList = [
-        "DOC UPLOAD PENDING(STP CASE-ASM VALIDATION PENDING)",
-        "MODIFY",
-        "DISBURSMENT DETAIL PENDING",
-        "DOCUMENT REQUEST",
-        "CUSTOMER APPLICATION FORM PENDING",
-        "BANK VERIFICATION PENDING",
-        "SALES DOC REJECTED",
-        "DOC UPLOAD PENDING",
-        "REFER TO SO",
-        "QUERY",
-        "DEAL STRUCTURE PENDING",
-        "SCORE CARD PENDING",
-        "ADD MEMBER",
-        "CUSTOMER APPLICATION FORM PENDING (STP CASE-ASM VALIDATION PENDING)",
-        "LOAN DETAIL PENDING"
-    ];
+    const soList = ["DOC UPLOAD PENDING(STP CASE-ASM VALIDATION PENDING)","MODIFY","DISBURSMENT DETAIL PENDING",
+                    "DOCUMENT REQUEST","CUSTOMER APPLICATION FORM PENDING","BANK VERIFICATION PENDING",
+                    "SALES DOC REJECTED","DOC UPLOAD PENDING","REFER TO SO","QUERY","DEAL STRUCTURE PENDING",
+                    "SCORE CARD PENDING","ADD MEMBER",
+                    "CUSTOMER APPLICATION FORM PENDING (STP CASE-ASM VALIDATION PENDING)","LOAN DETAIL PENDING"];
     if (soList.includes(s)) return "SO";
 
-    // REJECTED (RJ)
-    const rjList = [
-        "LOAN CANCELLED",
-        "COMPLIANCE REJECTED",
-        "LOAN DECLINED",
-        "DUPLICATE LEAD",
-        "BUREAU STATUS PENDING"
-    ];
+    const rjList = ["LOAN CANCELLED","COMPLIANCE REJECTED","LOAN DECLINED","DUPLICATE LEAD","BUREAU STATUS PENDING"];
     if (rjList.includes(s)) return "RJ";
 
-    // SANC, OPS, AD
     if (s === "LOAN SANCTIONED") return "SC";
     if (s === "QC" || s === "AUDIT PENDING") return "OPS";
     if (s === "AUTH DONE") return "AD";
@@ -130,7 +116,6 @@ function process(rows) {
             map[asm] = { MTD: {...empty}, WTD: {...empty}, YEST: {...empty}, TODAY: {...empty}, GRAND: 0 };
         }
 
-        // MTD Logic
         if (dt.getMonth() === today.getMonth() && dt.getFullYear() === today.getFullYear()) {
             map[asm].MTD[bucket]++; map[asm].MTD.TOTAL++;
             map[asm].GRAND++;
@@ -144,34 +129,60 @@ function process(rows) {
 }
 
 function render(map) {
-    let html = `<table><tr><th rowspan="2">ASM</th><th colspan="7">MTD</th><th colspan="7">WTD</th><th colspan="7">Yesterday</th><th colspan="7">Today</th><th rowspan="2">Grand</th></tr>
-    <tr>${'<th>AD</th><th>SO</th><th>CR</th><th>SC</th><th>RJ</th><th>OPS</th><th class="sub-total">TOTAL</th>'.repeat(4)}</tr>`;
+    const cols = ['AD','SO','CR','SC','RJ','OPS','TOTAL'];
+    let html = `<table>
+    <tr>
+        <th rowspan="2" class="asm-name">ASM</th>
+        <th colspan="8">MTD</th>
+        <th colspan="8">WTD</th>
+        <th colspan="8">Yesterday</th>
+        <th colspan="8">Today</th>
+        <th rowspan="2" class="grand-col">Grand</th>
+    </tr>
+    <tr>`;
+    
+    // Sub-headers with % column
+    for(let i=0; i<4; i++) {
+        cols.forEach(c => html += `<th class="${c === 'TOTAL' ? 'sub-total' : ''}">${c}</th>`);
+        html += `<th class="pct-col">%</th>`;
+    }
+    html += `</tr>`;
 
-    let gTotals = { MTD: {AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, WTD: {AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, YEST: {AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, TODAY: {AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, GRAND: 0 };
+    let g = { MTD:{AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, WTD:{AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, 
+              YEST:{AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, TODAY:{AD:0,SO:0,CR:0,SC:0,RJ:0,OPS:0,TOTAL:0}, GRAND:0 };
 
     for (let asm in map) {
         let r = map[asm];
-        html += `<tr><td>${asm}</td>
-        ${['MTD','WTD','YEST','TODAY'].map(k => `<td>${r[k].AD}</td><td>${r[k].SO}</td><td>${r[k].CR}</td><td>${r[k].SC}</td><td>${r[k].RJ}</td><td>${r[k].OPS}</td><td class="sub-total">${r[k].TOTAL}</td>`).join('')}
-        <td style="background:#f9f9f9"><b>${r.GRAND}</b></td></tr>`;
-
+        html += `<tr><td class="asm-name">${asm}</td>`;
         ['MTD','WTD','YEST','TODAY'].forEach(k => {
-            ['AD','SO','CR','SC','RJ','OPS','TOTAL'].forEach(b => gTotals[k][b] += r[k][b]);
+            cols.forEach(c => {
+                html += `<td class="${c === 'TOTAL' ? 'sub-total' : ''}">${r[k][c]}</td>`;
+                g[k][c] += r[k][c];
+            });
+            // Calculate % Not in SO
+            let notSO = r[k].TOTAL - r[k].SO;
+            let pct = r[k].TOTAL > 0 ? ((notSO / r[k].TOTAL) * 100).toFixed(0) : 0;
+            html += `<td class="pct-col">${pct}%</td>`;
         });
-        gTotals.GRAND += r.GRAND;
+        html += `<td class="grand-col">${r.GRAND}</td></tr>`;
+        g.GRAND += r.GRAND;
     }
 
-    // Summary Total Row
-    html += `<tr class="total-row"><td>TOTAL</td>
-    ${['MTD','WTD','YEST','TODAY'].map(k => `<td>${gTotals[k].AD}</td><td>${gTotals[k].SO}</td><td>${gTotals[k].CR}</td><td>${gTotals[k].SC}</td><td>${gTotals[k].RJ}</td><td>${gTotals[k].OPS}</td><td>${gTotals[k].TOTAL}</td>`).join('')}
-    <td>${gTotals.GRAND}</td></tr></table>`;
+    // Final Total Row
+    html += `<tr class="total-row"><td class="asm-name" style="color:white">TOTAL</td>`;
+    ['MTD','WTD','YEST','TODAY'].forEach(k => {
+        cols.forEach(c => html += `<td>${g[k][c]}</td>`);
+        let totalNotSO = g[k].TOTAL - g[k].SO;
+        let totalPct = g[k].TOTAL > 0 ? ((totalNotSO / g[k].TOTAL) * 100).toFixed(0) : 0;
+        html += `<td>${totalPct}%</td>`;
+    });
+    html += `<td>${g.GRAND}</td></tr></table>`;
 
-    document.getElementById("table").innerHTML = html;
+    document.getElementById("table-output").innerHTML = html;
 }
 
 function downloadExcel() {
-    if (Object.keys(finalData).length === 0) return alert("No data loaded!");
-    XLSX.writeFile(XLSX.utils.table_to_book(document.querySelector("table")), "Final_Operational_Report.xlsx");
+    XLSX.writeFile(XLSX.utils.table_to_book(document.querySelector("table")), "Operational_Visibility.xlsx");
 }
 </script>
 </body>
